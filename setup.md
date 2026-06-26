@@ -29,10 +29,17 @@
 
 
 
--BODY
+- BODY
   nav 
   Route = / => feed
   Route=/login => login
   Route =/connection => connection
   Route =/profile => profile
+  
+
+   # Deployment 
+  - signup on AWS
+  - Launch the instance (EC2 machine )
+  - Modify permission - chmod 400 secret-key(filename).pem
+  - connect with ssh command - ssh i ...
   

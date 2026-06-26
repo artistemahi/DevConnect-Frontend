@@ -3,6 +3,7 @@ import userReducer from "./userSlice";
 import feedReducer from "./feedSlice";
 import connectionReducer from "./connectionSlice";
 import requestReducer from "./requestSlice";
+
 const AppStore = configureStore({
   reducer: {
     user: userReducer,
@@ -11,4 +12,5 @@ const AppStore = configureStore({
     request: requestReducer,
   },
 });
+
 export default AppStore;
