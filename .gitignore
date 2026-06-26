@@ -11,7 +11,7 @@ lerna-debug.log*
 /dist
 /dist-ssr
 *.local
-
+/setup.md
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
