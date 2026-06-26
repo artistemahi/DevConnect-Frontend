@@ -1,18 +1,18 @@
 import NavBar from "./NavBar";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useContext } from "react";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { addUser } from "../utils/userSlice";
 import { BASE_URL } from "../utils/constants";
-import Loader from "./Loader";
+import { AuthContext } from "../utils/AuthContext";
 
 const Body = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useSelector((store) => store.user);
-  const [loading, setLoading] = useState(false);
+  const { setInitialising } = useContext(AuthContext);
 
   // Track if a fetch is already in-flight to prevent duplicate calls
   const fetchingRef = useRef(false);
@@ -21,8 +21,16 @@ const Body = () => {
   const isPublicRoute = publicRoutes.includes(location.pathname);
 
   useEffect(() => {
-    // Skip fetch on public routes or if user is already in store
-    if (isPublicRoute || user) return;
+    // On public routes, we're not initialising a protected session
+    if (isPublicRoute) {
+      setInitialising(false);
+      return;
+    }
+    // If user is already in store, no need to fetch
+    if (user) {
+      setInitialising(false);
+      return;
+    }
     // Prevent concurrent fetches
     if (fetchingRef.current) return;
 
@@ -31,7 +39,6 @@ const Body = () => {
     const fetchUser = async () => {
       try {
         fetchingRef.current = true;
-        setLoading(true);
 
         const res = await axios.get(BASE_URL + "/profile/view", {
           withCredentials: true,
@@ -40,29 +47,23 @@ const Body = () => {
 
         dispatch(addUser(res.data.user));
       } catch (err) {
-        // Ignore aborted requests (component unmounted)
         if (axios.isCancel(err)) return;
 
         if (err?.response?.status === 401) {
           navigate("/login", { replace: true });
         }
-        // For other errors (network, 5xx) we just leave the user on the page;
-        // protected routes will redirect if needed.
       } finally {
         fetchingRef.current = false;
-        setLoading(false);
+        setInitialising(false);
       }
     };
 
     fetchUser();
 
     return () => {
-      // Cancel the in-flight request when the effect re-runs or component unmounts
       controller.abort();
     };
-  }, [location.pathname, user, isPublicRoute, dispatch, navigate]);
-
-  if (loading && !isPublicRoute) return <Loader />;
+  }, [location.pathname, user, isPublicRoute, dispatch, navigate, setInitialising]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">

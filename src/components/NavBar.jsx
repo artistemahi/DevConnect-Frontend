@@ -4,6 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { removeUser } from "../utils/userSlice";
 import { removeConnection } from "../utils/connectionSlice";
+import { clearFeed } from "../utils/feedSlice";
+import { clearRequests } from "../utils/requestSlice";
 import { BASE_URL } from "../utils/constants";
 
 const NavBar = () => {
@@ -22,6 +24,8 @@ const NavBar = () => {
     } finally {
       dispatch(removeUser());
       dispatch(removeConnection());
+      dispatch(clearFeed());
+      dispatch(clearRequests());
       setMenuOpen(false);
       setDropdownOpen(false);
       navigate("/login");
@@ -48,32 +52,48 @@ const NavBar = () => {
             setDropdownOpen(false);
           }}
         >
+          {/* DevConnect Logo — interlocking < > with a link node */}
           <svg
-            viewBox="0 0 50 50"
-            className="h-10 w-10"
+            viewBox="0 0 44 44"
+            className="h-9 w-9 shrink-0"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"
           >
             <defs>
-              <linearGradient id="devLogo" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style={{ stopColor: "#06b6d4", stopOpacity: 1 }} />
-                <stop offset="100%" style={{ stopColor: "#3b82f6", stopOpacity: 1 }} />
+              <linearGradient id="dcGrad" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#22d3ee" />
+                <stop offset="100%" stopColor="#6366f1" />
               </linearGradient>
             </defs>
-            <rect x="4" y="4" width="36" height="36" rx="8" fill="url(#devLogo)" />
-            <text x="16" y="20" fontSize="12" fontWeight="bold" fill="white" fontFamily="monospace">&lt;</text>
-            <line x1="24" y1="12" x2="24" y2="24" stroke="white" strokeWidth="2" />
-            <text x="28" y="20" fontSize="12" fontWeight="bold" fill="white" fontFamily="monospace">&gt;</text>
-            <circle cx="12" cy="28" r="2.5" fill="white" />
-            <path d="M 10 32 Q 10 30 12 30 Q 14 30 14 32" fill="white" />
-            <circle cx="24" cy="26" r="3" fill="white" />
-            <path d="M 21 31 Q 21 28.5 24 28.5 Q 27 28.5 27 31" fill="white" />
-            <circle cx="36" cy="28" r="2.5" fill="white" />
-            <path d="M 34 32 Q 34 30 36 30 Q 38 30 38 32" fill="white" />
-            <circle cx="40" cy="8" r="2" fill="#06b6d4" />
+            {/* Rounded square background */}
+            <rect width="44" height="44" rx="12" fill="url(#dcGrad)" />
+            {/* Left bracket < */}
+            <polyline
+              points="17,13 10,22 17,31"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+            {/* Right bracket > */}
+            <polyline
+              points="27,13 34,22 27,31"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+            {/* Center link dot — represents a connection node */}
+            <circle cx="22" cy="22" r="2.5" fill="white" />
+            {/* Small accent dot top-right */}
+            <circle cx="37" cy="7" r="2" fill="white" fillOpacity="0.6" />
           </svg>
-          <span>DevConnect</span>
+          <span className="bg-gradient-to-r from-cyan-300 to-indigo-400 bg-clip-text text-transparent">
+            DevConnect
+          </span>
         </Link>
 
         <div className="flex items-center gap-3">
