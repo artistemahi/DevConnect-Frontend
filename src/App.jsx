@@ -12,6 +12,7 @@ import Request from "./components/Request";
 import Home from "./components/Home";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthContext } from "./utils/AuthContext";
+import Chat from "./components/Chat";
 
 function App() {
   const [initialising, setInitialising] = useState(true);
@@ -57,6 +58,14 @@ function App() {
                 element={
                   <ProtectedRoute initialising={initialising}>
                     <Request />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/chat/:targetUserId"
+                element={
+                  <ProtectedRoute initialising={initialising}>
+                    <Chat />
                   </ProtectedRoute>
                 }
               />
