@@ -1,48 +1,21 @@
-import { useParams } from "react-router-dom";
-import { useEffect, useState,useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
 import createSocketConnection from "../utils/socket";
 import { useSelector } from "react-redux";
 import axios from "axios";
-// const conversations = [
-//   {
-//     id: 1,
-//     name: "Obi-Wan Kenobi",
-//     avatar: "https://img.daisyui.com/images/profile/demo/kenobee@192.webp",
-//     lastMessage: "You were the Chosen One!",
-//   },
-//   {
-//     id: 2,
-//     name: "Anakin",
-//     avatar: "https://img.daisyui.com/images/profile/demo/anakeen@192.webp",
-//     lastMessage: "I hate you!",
-//   },
-// ];
-
-// const messages = [
-//   {
-//     id: 1,
-//     sender: "them",
-//     name: "Obi-Wan Kenobi",
-//     avatar: "https://img.daisyui.com/images/profile/demo/kenobee@192.webp",
-//     time: "12:45",
-//     text: "You were the Chosen One!",
-//     footer: "Delivered",
-//   },
-//   {
-//     id: 2,
-//     sender: "me",
-//     name: "Anakin",
-//     avatar: "https://img.daisyui.com/images/profile/demo/anakeen@192.webp",
-//     time: "12:46",
-//     text: "I hate you!",
-//     footer: "Seen at 12:46",
-//   },
-// ];
-
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
- const getConversations = async () => {
+
+const getConversations = async () => {
   const res = await axios.get(BASE_URL + "/chat/conversations", {
+    withCredentials: true,
+  });
+
+  return res.data;
+};
+
+const getChatMessages = async (targetUserId) => {
+  const res = await axios.get(BASE_URL + "/chat/" + targetUserId, {
     withCredentials: true,
   });
 
@@ -51,75 +24,162 @@ const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 const Chat = () => {
   const loggedInUser = useSelector((store) => store.user);
+
   const loggedInUserId = loggedInUser?._id;
   const firstName = loggedInUser?.firstName;
+
   const { targetUserId } = useParams();
+
+  const navigate = useNavigate();
+
   const [messages, setMessages] = useState([]);
   const [chatMessages, setChatMessages] = useState("");
   const [conversations, setConversations] = useState([]);
+
   const socketRef = useRef(null);
 
+  // Selected conversation
+  const selectedConversation = conversations.find(
+    (conv) => String(conv.user._id) === String(targetUserId),
+  );
 
-  // as soon as the page load socket connection is made and joinChat event is emitted
+  // Fetch previous messages when chat is opened
   useEffect(() => {
-    if (!loggedInUserId) return;
+    if (!targetUserId || !loggedInUserId) return;
+
+    const fetchChatMessages = async () => {
+      try {
+        const data = await getChatMessages(targetUserId);
+
+        const formattedMessages = data.messages.map((message) => ({
+          _id: message._id,
+
+          sender:
+            String(message.sender._id) === String(loggedInUserId)
+              ? "me"
+              : "them",
+
+          firstName: message.sender.firstName,
+          lastName: message.sender.lastName,
+          photoURL: message.sender.photoURL,
+
+          chatMessages: message.text,
+
+          time: new Date(message.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+
+          footer: message.seenAt
+            ? `Seen at ${new Date(message.seenAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : message.deliveredAt
+              ? "Delivered"
+              : "Sent",
+        }));
+
+        setMessages(formattedMessages);
+      } catch (err) {
+        console.error("Error fetching chat messages:", err);
+      }
+    };
+
+    fetchChatMessages();
+  }, [targetUserId, loggedInUserId]);
+
+  // Connect socket and join chat room
+  useEffect(() => {
+    if (!loggedInUserId || !targetUserId) return;
+
     const socket = createSocketConnection();
+
     socketRef.current = socket;
-    socketRef.current.emit("joinChat", { firstName, targetUserId, loggedInUserId });
-    // Listen for incoming messages from the server
-    socketRef.current.on("receiveMessage", ({ sender, chatMessages }) => {
 
-    setMessages((prev) => [
-        ...prev,
-        {
-            _id: crypto.randomUUID(),
-            sender: sender._id === loggedInUserId ? "me" : "them",
-            firstName: sender.firstName,
-            lastName: sender.lastName,
-            photoURL: sender.photoURL,
-            chatMessages,
-        },
-    ]);
-
-    setConversations((prev) => {
-        return prev.map((conv) =>
-            String(conv.user._id) === String(targetUserId)
-                ? {
-                    ...conv,
-                    lastMessage: chatMessages,
-                }
-                : conv
-        );
+    socketRef.current.emit("joinChat", {
+      firstName,
+      targetUserId,
+      loggedInUserId,
     });
 
-});
-    return () => {
-         if (socketRef.current) {
-        socketRef.current.disconnect();
-    }
-    };
-      
-  }, [loggedInUserId, targetUserId, firstName ]);
-  
-  useEffect(() => {
-     const fetchConversations = async () => {
-    try {
-      const data = await getConversations();
-      setConversations(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-  fetchConversations();
-}, []);
+    // Listen for new messages
+    socketRef.current.on("receiveMessage", ({ sender, chatMessages }) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          _id: chatMessages._id,
 
-  const  sendMessage = ()=>{
-    if (!chatMessages.trim()) return; // Prevent sending empty messages
-    socketRef.current.emit("sendMessages",{firstName,targetUserId,loggedInUserId,chatMessages});
-    setChatMessages(""); // Clear the input field after sending the message
-  }
+          sender: String(sender._id) === String(loggedInUserId) ? "me" : "them",
+
+          firstName: sender.firstName,
+          lastName: sender.lastName,
+          photoURL: sender.photoURL,
+
+          chatMessages: chatMessages.text,
+
+          time: new Date(chatMessages.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+
+          footer: chatMessages.deliveredAt ? "Delivered" : "Sent",
+        },
+      ]);
+
+      // Update sidebar preview
+      setConversations((prev) =>
+        prev.map((conv) =>
+          String(conv.user._id) === String(targetUserId)
+            ? {
+                ...conv,
+                lastMessage: chatMessages.text,
+                updatedAt: chatMessages.createdAt,
+              }
+            : conv,
+        ),
+      );
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [loggedInUserId, targetUserId, firstName]);
+
+  // Fetch conversations for sidebar
+  useEffect(() => {
+    if (!loggedInUserId) return;
+
+    const fetchConversations = async () => {
+      try {
+        const data = await getConversations();
+
+        setConversations(data);
+      } catch (err) {
+        console.error("Error fetching conversations:", err);
+      }
+    };
+
+    fetchConversations();
+  }, [loggedInUserId]);
+
+  // Send message
+  const sendMessage = () => {
+    if (!chatMessages.trim()) return;
+
+    if (!socketRef.current) return;
+
+    socketRef.current.emit("sendMessages", {
+      firstName,
+      targetUserId,
+      loggedInUserId,
+      chatMessages,
+    });
+
+    setChatMessages("");
+  };
+
   return (
-    // Full-height shell so everything below fills the screen instead of floating in the middle
     <div className="w-full h-screen flex overflow-hidden p-3 gap-3">
       {/* LEFT SIDE — chat list */}
       <div className="w-full sm:w-[300px] flex-shrink-0 flex flex-col h-full bg-blue-950 rounded-2xl overflow-hidden">
@@ -127,9 +187,9 @@ const Chat = () => {
         <header className="flex items-center gap-2 p-3 border-b border-white/10 flex-shrink-0">
           <button className="flex-shrink-0">
             <label className="btn btn-circle btn-sm swap swap-rotate">
-              {/* this hidden checkbox controls the state */}
               <input type="checkbox" />
-              {/* hamburger icon */}
+
+              {/* hamburger */}
               <svg
                 className="swap-off fill-current"
                 xmlns="http://www.w3.org/2000/svg"
@@ -139,7 +199,8 @@ const Chat = () => {
               >
                 <path d="M64,384H448V341.33H64Zm0-106.67H448V234.67H64ZM64,128v42.67H448V128Z" />
               </svg>
-              {/* close icon */}
+
+              {/* close */}
               <svg
                 className="swap-on fill-current"
                 xmlns="http://www.w3.org/2000/svg"
@@ -152,7 +213,7 @@ const Chat = () => {
             </label>
           </button>
 
-          {/* Search grows to fill the remaining width, hamburger stays put */}
+          {/* Search */}
           <search className="flex-grow min-w-0">
             <label className="input input-sm w-full rounded-full flex items-center gap-2">
               <svg
@@ -171,6 +232,7 @@ const Chat = () => {
                   <path d="m21 21-4.3-4.3"></path>
                 </g>
               </svg>
+
               <input
                 type="search"
                 required
@@ -185,12 +247,17 @@ const Chat = () => {
           MESSAGES
         </div>
 
-        {/* Scrollable conversation list */}
+        {/* Conversation list */}
         <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
           {conversations.map((conv) => (
             <button
               key={conv.user._id}
-              className="w-full flex items-center gap-3 p-2 rounded-xl text-left hover:bg-white/5 transition-colors"
+              onClick={() => navigate("/chat/" + conv.user._id)}
+              className={`w-full flex items-center gap-3 p-2 rounded-xl text-left transition-colors ${
+                String(conv.user._id) === String(targetUserId)
+                  ? "bg-white/10"
+                  : "hover:bg-white/5"
+              }`}
             >
               <div className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0">
                 <img
@@ -200,9 +267,18 @@ const Chat = () => {
                 />
               </div>
               <div className="min-w-0 flex-1 bg-white rounded-lg px-3 py-2">
-                <div className="font-bold text-sm text-gray-800 truncate">
-                  {conv.user.firstName} {conv.user.lastName}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-bold text-sm text-gray-800 truncate">
+                    {conv.user.firstName} {conv.user.lastName}
+                  </div>
+
+                  {conv.unreadCount > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold min-w-5 h-5 px-1.5 rounded-full flex items-center justify-center">
+                      {conv.unreadCount}
+                    </span>
+                  )}
                 </div>
+
                 <div className="text-xs text-gray-400 truncate">
                   {conv.lastMessage || "No messages yet"}
                 </div>
@@ -214,12 +290,38 @@ const Chat = () => {
 
       {/* RIGHT SIDE — active conversation */}
       <div className="flex-1 flex flex-col h-full min-w-0 rounded-2xl overflow-hidden">
+        {/* Chat Header */}
+        <div className="flex items-center gap-3 p-3 border-b border-white/10 flex-shrink-0">
+          {selectedConversation && (
+            <>
+              <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                <img
+                  src={selectedConversation.user.photoURL}
+                  alt={selectedConversation.user.firstName}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <div className="font-bold text-sm">
+                  {selectedConversation.user.firstName}{" "}
+                  {selectedConversation.user.lastName}
+                </div>
+
+                <div className="text-xs opacity-50">Offline</div>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 max-w-2xl w-full mx-auto">
           {messages.map((msg) => (
             <div
               key={msg._id}
-              className={`chat ${msg.sender === "me" ? "chat-end" : "chat-start"}`}
+              className={`chat ${
+                msg.sender === "me" ? "chat-end" : "chat-start"
+              }`}
             >
               <div className="chat-image avatar">
                 <div className="w-6 rounded-full overflow-hidden">
@@ -230,13 +332,17 @@ const Chat = () => {
                   />
                 </div>
               </div>
+
               <div className="chat-header text-xs">
                 {msg.firstName}
+
                 <time className="text-[10px] opacity-50 ml-1">{msg.time}</time>
               </div>
+
               <div className="chat-bubble rounded-2xl text-sm max-w-xs">
                 {msg.chatMessages}
               </div>
+
               <div className="chat-footer text-[10px] opacity-50">
                 {msg.footer}
               </div>
@@ -244,18 +350,24 @@ const Chat = () => {
           ))}
         </div>
 
-        {/* Composer — pinned to the bottom instead of pushed down with a fixed margin */}
+        {/* Composer */}
         <div className="flex items-center gap-2 p-3 border-t border-white/10 flex-shrink-0 max-w-2xl w-full mx-auto">
           <input
             value={chatMessages}
             onChange={(e) => {
               setChatMessages(e.target.value);
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                sendMessage();
+              }
+            }}
             type="text"
             placeholder="Type here..."
             className="bg-white text-black w-full rounded-full px-4 py-2 text-sm outline-none"
           />
-          <button 
+
+          <button
             className="bg-blue-500 px-4 py-2 text-sm font-bold hover:bg-blue-800 rounded-full flex-shrink-0 transition-colors"
             onClick={sendMessage}
           >
@@ -266,4 +378,5 @@ const Chat = () => {
     </div>
   );
 };
+
 export default Chat;
